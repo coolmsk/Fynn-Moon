@@ -9,57 +9,73 @@ interface ReportDisplayProps {
   onRefine: (comment: string) => void;
 }
 
-// A component to render markdown-like text, including tables and bold titles.
+// A component to render the specific Korean official report format.
 const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
   const lines = content.split('\n');
-  const elements: (JSX.Element | {type: 'li', content: string})[] = [];
+  const elements: JSX.Element[] = [];
   let currentTable: string[][] = [];
-  let isFirstTable = true;
+  let isFirstTable = true; // To identify the approval table
 
   const renderTable = () => {
-    if (currentTable.length < 2) { // Not a valid table (must have header and divider)
-        currentTable.forEach((row, index) => {
-            elements.push(<p key={`table-as-p-${elements.length}-${index}`}>{row.join(' | ')}</p>)
-        });
-        currentTable = [];
-        return;
-    };
+    if (currentTable.length === 0) return;
 
-    const isApprovalTable = isFirstTable;
-    isFirstTable = false;
+    // Filter out markdown table separator lines (e.g., |:---|:---|)
+    const tableData = currentTable.filter(row => !row.every(cell => /^-+$/.test(cell.replace(/:/g, ''))));
     
-    const header = currentTable[0];
-    const bodyRows = currentTable.slice(2);
+    if (isFirstTable) { // Approval Table
+      isFirstTable = false;
+      const header = tableData[0] || [];
+      const bodyRows = tableData.slice(1);
 
-    elements.push(
-      <div key={`table-wrapper-${elements.length}`} className={isApprovalTable ? "flex justify-end my-4" : "my-4"}>
-        <table className="border-collapse">
-            <thead>
-                <tr>
-                    {header.map((cell, i) => (
-                        <th key={i} className="border border-slate-400 dark:border-slate-600 px-4 py-1 text-center font-medium text-sm">{cell}</th>
-                    ))}
-                </tr>
-            </thead>
-            <tbody>
-                {bodyRows.map((row, i) => (
-                    <tr key={i}>
-                        {row.map((cell, j) => (
-                            <td key={j} className={`border border-slate-400 dark:border-slate-600 text-center ${isApprovalTable ? "h-20 w-24" : "p-2"}`} dangerouslySetInnerHTML={{ __html: cell || '&nbsp;' }}></td>
-                        ))}
-                    </tr>
-                ))}
-            </tbody>
-        </table>
-      </div>
-    );
+      elements.push(
+        <div key={`table-wrapper-${elements.length}`} className="flex justify-end my-4">
+          <table className="border-collapse">
+              <thead>
+                  <tr>
+                      {header.map((cell, i) => (
+                          <th key={i} className="border border-slate-400 dark:border-slate-600 px-4 py-1 text-center font-medium text-sm text-slate-700 dark:text-slate-300">{cell}</th>
+                      ))}
+                  </tr>
+              </thead>
+              <tbody>
+                  {bodyRows.map((row, i) => (
+                      <tr key={i}>
+                          {row.map((cell, j) => (
+                              <td key={j} className="border border-slate-400 dark:border-slate-600 text-center h-20 w-24 text-slate-700 dark:text-slate-300">{cell.trim() || '\u00A0'}</td>
+                          ))}
+                      </tr>
+                  ))}
+              </tbody>
+          </table>
+        </div>
+      );
+    } else { // Metadata Table
+      elements.push(
+        <div key={`table-wrapper-${elements.length}`} className="my-4">
+          <table className="w-full border-collapse border border-slate-400 dark:border-slate-600">
+              <tbody>
+                  {tableData.map((row, i) => (
+                     <tr key={i}>
+                       <th className="w-40 border border-slate-400 dark:border-slate-600 bg-slate-100 dark:bg-slate-700 p-2 text-center font-medium text-slate-700 dark:text-slate-300">{row[0]}</th>
+                       <td className="border border-slate-400 dark:border-slate-600 p-2 pl-4 text-left text-slate-700 dark:text-slate-300">{row[1]}</td>
+                     </tr>
+                  ))}
+              </tbody>
+          </table>
+        </div>
+      );
+    }
     currentTable = [];
   };
 
-  lines.forEach((line) => {
+  lines.forEach((line, index) => {
     const trimmedLine = line.trim();
     if (trimmedLine.startsWith('|') && trimmedLine.endsWith('|')) {
       currentTable.push(trimmedLine.slice(1, -1).split('|').map(cell => cell.trim()));
+      // If this is the last line, render the table
+      if (index === lines.length - 1) {
+        renderTable();
+      }
       return;
     }
 
@@ -67,48 +83,38 @@ const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
       renderTable();
     }
 
-    if (line.startsWith('## ')) {
-      elements.push(<h2 key={elements.length} className="text-2xl font-bold mt-6 mb-3 border-b pb-2">{line.substring(3)}</h2>);
-    } else if (trimmedLine.startsWith('**') && trimmedLine.endsWith('**')) {
-      elements.push(<h1 key={elements.length} className="text-3xl font-bold my-4 text-center">{trimmedLine.substring(2, trimmedLine.length - 2)}</h1>);
-    } else if (line.startsWith('* ') || line.startsWith('- ')) {
-      elements.push({type: 'li', content: line.substring(2)});
-    } else if (trimmedLine === '') {
-      elements.push(<br key={elements.length} />);
+    if (trimmedLine === '보 고 서') {
+        elements.push(<h1 key={index} className="text-3xl font-bold my-6 text-center tracking-[0.5em]">{trimmedLine}</h1>);
+        return;
+    }
+    
+    const level1Regex = /^\s*\d+\.\s/;
+    const level2Regex = /^\s*[가-힣]\.\s/;
+    const level3Regex = /^\s*\d+\)\s/;
+    const level4Regex = /^\s*[가-힣]\)\s/;
+
+    if (trimmedLine === '') {
+        elements.push(<div key={index} className="h-4" />); // Spacer for empty lines
+    } else if (level1Regex.test(trimmedLine)) {
+        elements.push(<p key={index} className="mb-1 pl-0">{trimmedLine}</p>);
+    } else if (level2Regex.test(trimmedLine)) {
+        elements.push(<p key={index} className="mb-1 pl-4">{trimmedLine}</p>);
+    } else if (level3Regex.test(trimmedLine)) {
+        elements.push(<p key={index} className="mb-1 pl-8">{trimmedLine}</p>);
+    } else if (level4Regex.test(trimmedLine)) {
+        elements.push(<p key={index} className="mb-1 pl-12">{trimmedLine}</p>);
     } else {
-      elements.push(<p key={elements.length} className="mb-2">{line}</p>);
+        // For any text that doesn't match the list format, but isn't part of a table or title
+        elements.push(<p key={index} className="mb-1">{trimmedLine}</p>);
     }
   });
 
+  // Render any remaining table at the end of the content
   if (currentTable.length > 0) {
     renderTable();
   }
 
-  // Group list items
-  const renderedContent = [];
-  let listItems: JSX.Element[] = [];
-  for (let i = 0; i < elements.length; i++) {
-    const item = elements[i];
-    // FIX: The original type guard was not specific enough for TypeScript to differentiate
-    // the custom list item object from a standard JSX.Element. Checking for the existence
-    // of the 'content' property is a reliable way to identify our custom object and resolve the type error.
-    if (typeof item === 'object' && item && 'content' in item) {
-        listItems.push(<li key={`li-${i}`}>{item.content}</li>);
-    } else {
-      if (listItems.length > 0) {
-        renderedContent.push(<ul key={`ul-${i}`} className="mb-4 ml-5 list-disc">{listItems}</ul>);
-        listItems = [];
-      }
-      if (React.isValidElement(item)) {
-        renderedContent.push(item);
-      }
-    }
-  }
-  if (listItems.length > 0) {
-    renderedContent.push(<ul key="ul-last" className="mb-4 ml-5 list-disc">{listItems}</ul>);
-  }
-
-  return <div>{renderedContent}</div>;
+  return <div>{elements}</div>;
 };
 
 
@@ -171,45 +177,45 @@ const ReportDisplay: React.FC<ReportDisplayProps> = ({ reportData, onReset, onRe
             font-weight: bold;
             margin-top: 1.5rem;
             margin-bottom: 2rem;
-        }
-        h2 {
-            font-size: 16pt;
-            font-weight: bold;
-            margin-top: 1.5rem;
-            margin-bottom: 1rem;
-            padding-bottom: 0.25rem;
-            border-bottom: 1.5px solid #000;
-            page-break-after: avoid;
-        }
-        ul {
-            padding-left: 2em;
-            margin-bottom: 1rem;
-        }
-        li {
-            margin-bottom: 0.5rem;
+            letter-spacing: 0.5em;
         }
         p {
-            margin-bottom: 1rem;
+            margin-bottom: 0.25rem;
         }
         table {
             border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 1rem;
+        }
+        table.approval-table {
             width: auto;
             margin-left: auto;
             margin-right: 0;
-            margin-bottom: 1rem;
         }
         th, td {
             border: 1px solid #000;
             padding: 0.25rem 0.5rem;
             text-align: center;
+            color: #000 !important;
         }
         th {
-            font-weight: normal;
+            font-weight: bold;
+            background-color: #f2f2f2;
         }
         td {
             height: 4em;
         }
+        td.meta-value {
+          text-align: left;
+          height: auto;
+        }
     `;
+
+    // A bit of a hack to give tables classes for printing
+    let printableHtml = reportHtml.replace('<table class="border-collapse">', '<table class="border-collapse approval-table">');
+    printableHtml = printableHtml.replace('<table class="w-full border-collapse border border-slate-400 dark:border-slate-600">', '<table class="w-full border-collapse">');
+    printableHtml = printableHtml.replace(/<td class="border border-slate-400 dark:border-slate-600 p-2 pl-4 text-left text-slate-700 dark:text-slate-300">/g, '<td class="meta-value">');
+
 
     const printWindow = window.open('', '_blank');
 
@@ -223,14 +229,18 @@ const ReportDisplay: React.FC<ReportDisplayProps> = ({ reportData, onReset, onRe
                 <style>${printStyles}</style>
             </head>
             <body>
-                ${reportHtml}
+                ${printableHtml}
             </body>
             </html>
         `);
         
         printWindow.document.close();
         printWindow.focus();
-        printWindow.print();
+        
+        // Wait for content to render before printing
+        setTimeout(() => {
+          printWindow.print();
+        }, 500);
         
     } else {
         alert('팝업이 차단되었습니다. PDF 인쇄를 위해 팝업을 허용해주세요.');

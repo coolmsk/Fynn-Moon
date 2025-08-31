@@ -39,31 +39,45 @@ export async function generateReport(
     reportDate: string,
     refinementInstructions?: string
 ): Promise<string> {
-  const systemInstruction = `You are a professional report generator for Korean public institutions. Your task is to transform raw text into a formal, structured, and professional report document. The language must be formal, objective, and adhere to the standards of official Korean government documents. The output must be entirely in Korean and formatted using markdown. The report must start with a formal approval signature table, followed by report metadata (team, date, author), a bolded title, and then the main content.`;
+  const systemInstruction = `You are a professional report generator for Korean public institutions. Your task is to transform raw text into a formal, structured, and professional report document. The language must be formal, objective, and adhere to the standards of official Korean government documents. The output must be entirely in Korean and formatted using markdown, strictly following the user's specified structure. Do not add any extra explanations or text outside of the report format.`;
 
-  let userPrompt = `
-    다음 정보를 바탕으로 공식 보고서를 작성해 주십시오. 보고서의 구조는 다음 순서를 엄격히 따라야 합니다.
+  const approvers = [author, ...approvalLine.split(',').map(s => s.trim()).filter(s => s)];
+  const approvalHeader = `| ${approvers.join(' | ')} |`;
+  const approvalSeparator = `| ${approvers.map(() => ':---').join(' | ')} |`;
+  const approvalBody = `| ${approvers.map(() => ' ').join(' | ')} |`;
 
-    1.  **결재란**: 보고서 최상단에 다음 결재라인에 따른 결재란을 마크다운 테이블로 만들어주세요. 결재라인의 첫 번째는 작성자 본인입니다. 테이블의 첫 행은 직위/이름을, 두 번째 행은 서명을 위한 빈 칸으로 구성해주세요.
-        - 결재라인: ${author}, ${approvalLine}
+  const reportStructurePrompt = `
+    보고서의 구조는 다음 지시사항을 **반드시**, **정확하게** 따라야 합니다.
 
-    2.  **보고서 정보**: 결재란 바로 아래에 다음 정보를 명시해주세요. 각 항목은 한 줄씩 차지해야 합니다.
-        - 팀명: ${teamName}
-        - 일시: ${reportDate}
-        - 작성자: ${author}
+    1.  **보고서 제목**: 보고서의 가장 첫 줄에는 '보 고 서' 라는 텍스트가 있어야 합니다. (다른 텍스트 없이 이 문구만)
 
-    3.  **제목**: 보고서 정보 아래에, 원본 내용을 함축하는 '제목'을 만들어 '**'로 감싸 굵은 글씨로 표시해주세요. 이 제목은 보고서 내용과 분리된 한 줄이어야 합니다.
+    2.  **결재란**: 보고서 우측 상단에 표시될 결재란을 다음 형식의 마크다운 테이블로 만들어주세요.
+${approvalHeader}
+${approvalSeparator}
+${approvalBody}
 
-    4.  **보고서 본문**: 제목 아래에 보고서의 본문을 작성해주세요. 본문은 개요, 주요 내용, 실행 계획 등의 체계적인 구조를 갖추어야 합니다.
+    3.  **보고서 정보**: '보 고 서' 제목 바로 아래에, 다음 정보를 포함하는 2열짜리 마크다운 테이블을 만들어주세요.
+        | 팀명 | ${teamName} |
+        | :--- | :--- |
+        | 일시 | ${reportDate} |
+        | 작성자/보고자 | ${author} |
+        | 제목 | [여기에 원본 내용을 요약한 보고서 제목을 생성하여 기입하세요] |
 
-    ## 추가 지시사항
-    ${instructions || '없음'}
-
-    ## 원본 내용
-    ---
-    ${text}
-    ---
+    4.  **보고서 본문**: 보고서 정보 테이블 아래에, 다음의 계층적 번호 매기기 형식을 사용하여 본문을 작성해주세요. Markdown의 제목 기호(예: #, ##)나 굵은 글씨/기울임 기호(**, *)는 절대 사용하지 마세요.
+        - 본문 내용은 반드시 다음 5가지 항목 순서로 전개해야 합니다:
+          1. 현황 및 개요
+          2. 문제점(데이터) 분석
+          3. 개선방향
+          4. 추진계획(세부내용)
+          5. 총론
+        - 각 항목 내의 세부 내용은 다음의 계층적 번호 매기기 형식을 사용하세요.
+          - 가. (두 번째 수준)
+          - 1) (세 번째 수준)
+          - 가) (네 번째 수준)
+        - **문장 스타일**: 모든 문장은 명사형으로 끝나는 **개조식**으로 작성해야 합니다. (예: "...~을 실시함.", "...~가 필요함.")
     `;
+
+    let userPrompt;
 
     if (refinementInstructions && refinementInstructions.trim().length > 0) {
         userPrompt = `
@@ -75,26 +89,28 @@ ${refinementInstructions}
 ---
 
 ## 보고서 재작성 가이드라인 (이 가이드라인을 반드시 따라서 수정해주세요)
-아래의 구조와 정보를 사용하여 보고서 전체를 새로 생성해야 합니다.
+${reportStructurePrompt}
 
-1.  **결재란**: 보고서 최상단에 마크다운 테이블 형식의 결재란이 있어야 합니다. 첫 행은 직위/이름, 둘째 행은 빈 칸이어야 합니다.
-    - 결재라인: ${author}, ${approvalLine}
-
-2.  **보고서 정보**: 각 항목이 한 줄을 차지하도록 명시해야 합니다.
-    - 팀명: ${teamName}
-    - 일시: ${reportDate}
-    - 작성자: ${author}
-
-3.  **제목**: '**'로 감싸진 굵은 글씨의 제목이 별도의 한 줄에 있어야 합니다.
-
-4.  **보고서 본문**: 체계적인 구조(개요, 주요 내용 등)를 갖춘 본문이 와야 합니다.
-
-## 원본 내용
+## 원본 내용 (참고용)
 ---
 ${text}
 ---
 
 최종 결과물은 위의 가이드라인과 수정 요청사항이 모두 반영된 완전한 형태의 보고서여야 합니다.
+        `;
+    } else {
+        userPrompt = `
+다음 정보를 바탕으로 공식 보고서를 작성해 주십시오.
+
+${reportStructurePrompt}
+
+## 추가 지시사항
+${instructions || '없음'}
+
+## 원본 내용
+---
+${text}
+---
         `;
     }
 
