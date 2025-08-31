@@ -6,7 +6,7 @@ import FileUpload from './components/FileUpload';
 import ReportDisplay from './components/ReportDisplay';
 import Loader from './components/Loader';
 import { extractTextFromFile, generateReport } from './services/geminiService';
-import { HeaderIcon, FileIcon, TextIcon, SunIcon, MoonIcon } from './components/icons';
+import { HeaderIcon, FileIcon, TextIcon, SunIcon, MoonIcon, ChevronDownIcon } from './components/icons';
 
 const App: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<AppStep>(AppStep.UPLOAD);
@@ -21,6 +21,10 @@ const App: React.FC = () => {
   const [author, setAuthor] = useState<string>('');
   const [approvalLine, setApprovalLine] = useState<string>('');
   const [additionalInstructions, setAdditionalInstructions] = useState<string>('');
+  const [formFile, setFormFile] = useState<File | null>(null);
+  const [isInstructionsExpanded, setIsInstructionsExpanded] = useState(false);
+  const [isFormUploadExpanded, setIsFormUploadExpanded] = useState(false);
+
 
   // Results & Status
   const [reportData, setReportData] = useState<ReportData | null>(null);
@@ -89,7 +93,7 @@ const App: React.FC = () => {
       }
       
       setLoadingMessage('입력된 내용으로 보고서를 생성 중입니다...');
-      const generatedReport = await generateReport(sourceText, author, approvalLine, additionalInstructions, teamName, reportDate);
+      const generatedReport = await generateReport(sourceText, author, approvalLine, additionalInstructions, teamName, reportDate, undefined, formFile);
 
       setReportData({ extractedText: sourceText, generatedReport });
       setCurrentStep(AppStep.REPORT);
@@ -100,7 +104,7 @@ const App: React.FC = () => {
     } finally {
       setLoadingMessage('');
     }
-  }, [imageFile, inputText, author, approvalLine, additionalInstructions, inputMode, teamName, reportDate]);
+  }, [imageFile, inputText, author, approvalLine, additionalInstructions, inputMode, teamName, reportDate, formFile]);
 
   const handleRefine = useCallback(async (refinementComment: string) => {
     if (!reportData?.extractedText || !refinementComment.trim()) {
@@ -120,7 +124,8 @@ const App: React.FC = () => {
             additionalInstructions,
             teamName,
             reportDate,
-            refinementComment
+            refinementComment,
+            formFile
         );
         
         setReportData(prevData => prevData ? { ...prevData, generatedReport: refinedReport } : null);
@@ -133,7 +138,7 @@ const App: React.FC = () => {
     } finally {
         setLoadingMessage('');
     }
-  }, [reportData, author, approvalLine, additionalInstructions, teamName, reportDate]);
+  }, [reportData, author, approvalLine, additionalInstructions, teamName, reportDate, formFile]);
 
   const handleReset = () => {
     setCurrentStep(AppStep.UPLOAD);
@@ -145,6 +150,7 @@ const App: React.FC = () => {
     setAuthor('');
     setApprovalLine('');
     setAdditionalInstructions('');
+    setFormFile(null);
   };
 
   const renderUploadStep = () => (
@@ -183,29 +189,74 @@ const App: React.FC = () => {
         )}
       </div>
 
-      <div className="space-y-6 pt-6 border-t border-slate-200 dark:border-slate-700">
-        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">2. 보고서 정보 입력</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label htmlFor="teamName" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">팀명 <span className="text-red-500">*</span></label>
-            <input type="text" id="teamName" value={teamName} onChange={e => setTeamName(e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md focus:ring-1 focus:ring-indigo-500 placeholder-slate-400 dark:placeholder-slate-500" required aria-required="true"/>
+      <div className="space-y-4 pt-6 border-t border-slate-200 dark:border-slate-700">
+        <div>
+          <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4">2. 보고서 정보 입력</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="teamName" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">팀명 <span className="text-red-500">*</span></label>
+              <input type="text" id="teamName" value={teamName} onChange={e => setTeamName(e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md focus:ring-1 focus:ring-indigo-500 placeholder-slate-400 dark:placeholder-slate-500" required aria-required="true"/>
+            </div>
+            <div>
+              <label htmlFor="reportDate" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">일시 <span className="text-red-500">*</span></label>
+              <input type="text" id="reportDate" value={reportDate} onChange={e => setReportDate(e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md focus:ring-1 focus:ring-indigo-500 placeholder-slate-400 dark:placeholder-slate-500" required aria-required="true"/>
+            </div>
+            <div>
+              <label htmlFor="author" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">작성자/보고자 이름 <span className="text-red-500">*</span></label>
+              <input type="text" id="author" value={author} onChange={e => setAuthor(e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md focus:ring-1 focus:ring-indigo-500 placeholder-slate-400 dark:placeholder-slate-500" required aria-required="true"/>
+            </div>
+            <div>
+              <label htmlFor="approvalLine" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">결재라인 <span className="text-red-500">*</span></label>
+              <input type="text" id="approvalLine" value={approvalLine} onChange={e => setApprovalLine(e.target.value)} placeholder="예: 팀장, 부장, 본부장" className="w-full p-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md focus:ring-1 focus:ring-indigo-500 placeholder-slate-400 dark:placeholder-slate-500" required aria-required="true"/>
+            </div>
           </div>
-          <div>
-            <label htmlFor="reportDate" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">일시 <span className="text-red-500">*</span></label>
-            <input type="text" id="reportDate" value={reportDate} onChange={e => setReportDate(e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md focus:ring-1 focus:ring-indigo-500 placeholder-slate-400 dark:placeholder-slate-500" required aria-required="true"/>
+        </div>
+
+        <div>
+          <button
+            onClick={() => setIsInstructionsExpanded(!isInstructionsExpanded)}
+            className="w-full flex justify-between items-center text-left text-lg font-bold text-slate-800 dark:text-slate-100 py-2"
+            aria-expanded={isInstructionsExpanded}
+            aria-controls="instructions-panel"
+          >
+            <span>3. 추가 지시사항 (선택)</span>
+            <ChevronDownIcon className={`w-5 h-5 transition-transform duration-300 ${isInstructionsExpanded ? 'rotate-180' : ''}`} />
+          </button>
+          <div
+            id="instructions-panel"
+            className={`transition-all duration-300 ease-in-out overflow-hidden ${isInstructionsExpanded ? 'max-h-40 pt-2' : 'max-h-0'}`}
+          >
+            <textarea
+              id="instructions"
+              value={additionalInstructions}
+              onChange={e => setAdditionalInstructions(e.target.value)}
+              rows={3}
+              className="w-full p-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md focus:ring-1 focus:ring-indigo-500 placeholder-slate-400 dark:placeholder-slate-500"
+              placeholder="보고서에 특별히 포함되어야 할 내용이나 강조할 점을 입력하세요."
+            />
           </div>
-          <div>
-            <label htmlFor="author" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">작성자/보고자 이름 <span className="text-red-500">*</span></label>
-            <input type="text" id="author" value={author} onChange={e => setAuthor(e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md focus:ring-1 focus:ring-indigo-500 placeholder-slate-400 dark:placeholder-slate-500" required aria-required="true"/>
-          </div>
-          <div>
-            <label htmlFor="approvalLine" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">결재라인 <span className="text-red-500">*</span></label>
-            <input type="text" id="approvalLine" value={approvalLine} onChange={e => setApprovalLine(e.target.value)} placeholder="예: 팀장, 부장, 본부장" className="w-full p-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md focus:ring-1 focus:ring-indigo-500 placeholder-slate-400 dark:placeholder-slate-500" required aria-required="true"/>
-          </div>
-          <div className="md:col-span-2">
-            <label htmlFor="instructions" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">추가 지시사항 (선택)</label>
-            <textarea id="instructions" value={additionalInstructions} onChange={e => setAdditionalInstructions(e.target.value)} rows={3} className="w-full p-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md focus:ring-1 focus:ring-indigo-500 placeholder-slate-400 dark:placeholder-slate-500" placeholder="보고서에 특별히 포함되어야 할 내용이나 강조할 점을 입력하세요."></textarea>
-          </div>
+        </div>
+
+
+        <div>
+            <button
+              onClick={() => setIsFormUploadExpanded(!isFormUploadExpanded)}
+              className="w-full flex justify-between items-center text-left text-lg font-bold text-slate-800 dark:text-slate-100 py-2"
+              aria-expanded={isFormUploadExpanded}
+              aria-controls="form-upload-panel"
+            >
+              <span>4. 양식 업로드 (선택)</span>
+              <ChevronDownIcon className={`w-5 h-5 transition-transform duration-300 ${isFormUploadExpanded ? 'rotate-180' : ''}`} />
+            </button>
+            <div
+                id="form-upload-panel"
+                className={`transition-all duration-300 ease-in-out overflow-hidden ${isFormUploadExpanded ? 'max-h-96 pt-2' : 'max-h-0'}`}
+            >
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">
+                사용할 특정 보고서 양식 파일(이미지, PDF)이 있다면 업로드해주세요. 양식이 없을 경우, AI가 표준 공공기관 보고서 양식을 생성합니다.
+              </p>
+              <FileUpload onFileSelect={setFormFile} />
+            </div>
         </div>
       </div>
       

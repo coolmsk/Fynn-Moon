@@ -1,7 +1,13 @@
-
 import React, { useState } from 'react';
 import type { ReportData } from '../types';
 import { DownloadIcon } from './icons';
+
+declare global {
+  interface Window {
+    jspdf: any;
+    html2canvas: any;
+  }
+}
 
 interface ReportDisplayProps {
   reportData: ReportData;
@@ -150,100 +156,88 @@ const ReportDisplay: React.FC<ReportDisplayProps> = ({ reportData, onReset, onRe
     document.body.removeChild(fileDownload);
   };
   
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     const reportContentElement = document.getElementById('report-content-wrapper');
     if (!reportContentElement) {
         console.error("Report content element not found");
         return;
     }
+    if (!window.html2canvas || !window.jspdf) {
+        alert("PDF 생성 라이브러리를 로드하지 못했습니다. 페이지를 새로고침하고 다시 시도해주세요.");
+        return;
+    }
+    
+    const downloadButton = document.getElementById('pdf-download-btn');
+    let originalButtonContent = '';
+    if (downloadButton) {
+        originalButtonContent = downloadButton.innerHTML;
+        downloadButton.innerHTML = `
+            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            생성 중...
+        `;
+        downloadButton.setAttribute('disabled', 'true');
+    }
 
-    const reportHtml = reportContentElement.innerHTML;
+    const docElement = document.documentElement;
+    const wasDarkMode = docElement.classList.contains('dark');
+    if (wasDarkMode) {
+        docElement.classList.remove('dark');
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Professional styles for the print-only window
-    const printStyles = `
-        body {
-            font-family: 'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', 'Nanum Gothic', dotum, sans-serif;
-            font-size: 11pt;
-            line-height: 1.6;
-            color: #000;
-        }
-        @page {
-            size: A4;
-            margin: 2cm;
-        }
-        h1 {
-            font-size: 20pt;
-            text-align: center;
-            font-weight: bold;
-            margin-top: 1.5rem;
-            margin-bottom: 2rem;
-            letter-spacing: 0.5em;
-        }
-        p {
-            margin-bottom: 0.25rem;
-        }
-        table {
-            border-collapse: collapse;
-            width: 100%;
-            margin-bottom: 1rem;
-        }
-        table.approval-table {
-            width: auto;
-            margin-left: auto;
-            margin-right: 0;
-        }
-        th, td {
-            border: 1px solid #000;
-            padding: 0.25rem 0.5rem;
-            text-align: center;
-            color: #000 !important;
-        }
-        th {
-            font-weight: bold;
-            background-color: #f2f2f2;
-        }
-        td {
-            height: 4em;
-        }
-        td.meta-value {
-          text-align: left;
-          height: auto;
-        }
-    `;
+    try {
+        const canvas = await window.html2canvas(reportContentElement, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: '#ffffff'
+        });
 
-    // A bit of a hack to give tables classes for printing
-    let printableHtml = reportHtml.replace('<table class="border-collapse">', '<table class="border-collapse approval-table">');
-    printableHtml = printableHtml.replace('<table class="w-full border-collapse border border-slate-400 dark:border-slate-600">', '<table class="w-full border-collapse">');
-    printableHtml = printableHtml.replace(/<td class="border border-slate-400 dark:border-slate-600 p-2 pl-4 text-left text-slate-700 dark:text-slate-300">/g, '<td class="meta-value">');
-
-
-    const printWindow = window.open('', '_blank');
-
-    if (printWindow) {
-        printWindow.document.write(`
-            <!DOCTYPE html>
-            <html lang="ko">
-            <head>
-                <meta charset="UTF-8">
-                <title>AI 분석 보고서</title>
-                <style>${printStyles}</style>
-            </head>
-            <body>
-                ${printableHtml}
-            </body>
-            </html>
-        `);
+        const imgData = canvas.toDataURL('image/jpeg', 0.9);
         
-        printWindow.document.close();
-        printWindow.focus();
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({
+            orientation: 'p',
+            unit: 'mm',
+            format: 'a4'
+        });
+
+        const margin = 15;
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const usableWidth = pdfWidth - (margin * 2);
+        const usableHeight = pdfHeight - (margin * 2);
         
-        // Wait for content to render before printing
-        setTimeout(() => {
-          printWindow.print();
-        }, 500);
-        
-    } else {
-        alert('팝업이 차단되었습니다. PDF 인쇄를 위해 팝업을 허용해주세요.');
+        const imgProps = pdf.getImageProperties(imgData);
+        const imgRatio = imgProps.width / imgProps.height;
+
+        let finalWidth = usableWidth;
+        let finalHeight = finalWidth / imgRatio;
+
+        if (finalHeight > usableHeight) {
+            finalHeight = usableHeight;
+            finalWidth = finalHeight * imgRatio;
+        }
+
+        const xPos = margin + (usableWidth - finalWidth) / 2;
+        const yPos = margin;
+
+        pdf.addImage(imgData, 'JPEG', xPos, yPos, finalWidth, finalHeight);
+        pdf.save('ai-report.pdf');
+
+    } catch (e) {
+        console.error("An error occurred while generating the PDF:", e);
+        alert("PDF를 생성하는 중 오류가 발생했습니다.");
+    } finally {
+        if (wasDarkMode) {
+            docElement.classList.add('dark');
+        }
+        if (downloadButton) {
+            downloadButton.innerHTML = originalButtonContent;
+            downloadButton.removeAttribute('disabled');
+        }
     }
   };
 
@@ -266,7 +260,7 @@ const ReportDisplay: React.FC<ReportDisplayProps> = ({ reportData, onReset, onRe
                 <button onClick={handleDownloadDoc} className="flex items-center justify-center w-full bg-blue-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all duration-200">
                     <DownloadIcon /> DOCX 다운로드
                 </button>
-                <button onClick={handleDownloadPdf} className="flex items-center justify-center w-full bg-red-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-300 transition-all duration-200">
+                <button id="pdf-download-btn" onClick={handleDownloadPdf} className="flex items-center justify-center w-full bg-red-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-300 transition-all duration-200 disabled:opacity-75">
                     <DownloadIcon /> PDF 다운로드
                 </button>
             </div>
