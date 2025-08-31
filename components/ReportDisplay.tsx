@@ -9,38 +9,103 @@ interface ReportDisplayProps {
   onRefine: (comment: string) => void;
 }
 
-// A simple component to render markdown-like text
+// A component to render markdown-like text, including tables and bold titles.
 const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
-  const lines = content.split('\n').map((line, index) => {
+  const lines = content.split('\n');
+  const elements: (JSX.Element | {type: 'li', content: string})[] = [];
+  let currentTable: string[][] = [];
+  let isFirstTable = true;
+
+  const renderTable = () => {
+    if (currentTable.length < 2) { // Not a valid table (must have header and divider)
+        currentTable.forEach((row, index) => {
+            elements.push(<p key={`table-as-p-${elements.length}-${index}`}>{row.join(' | ')}</p>)
+        });
+        currentTable = [];
+        return;
+    };
+
+    const isApprovalTable = isFirstTable;
+    isFirstTable = false;
+    
+    const header = currentTable[0];
+    const bodyRows = currentTable.slice(2);
+
+    elements.push(
+      <div key={`table-wrapper-${elements.length}`} className={isApprovalTable ? "flex justify-end my-4" : "my-4"}>
+        <table className="border-collapse">
+            <thead>
+                <tr>
+                    {header.map((cell, i) => (
+                        <th key={i} className="border border-slate-400 dark:border-slate-600 px-4 py-1 text-center font-medium text-sm">{cell}</th>
+                    ))}
+                </tr>
+            </thead>
+            <tbody>
+                {bodyRows.map((row, i) => (
+                    <tr key={i}>
+                        {row.map((cell, j) => (
+                            <td key={j} className={`border border-slate-400 dark:border-slate-600 text-center ${isApprovalTable ? "h-20 w-24" : "p-2"}`} dangerouslySetInnerHTML={{ __html: cell || '&nbsp;' }}></td>
+                        ))}
+                    </tr>
+                ))}
+            </tbody>
+        </table>
+      </div>
+    );
+    currentTable = [];
+  };
+
+  lines.forEach((line) => {
+    const trimmedLine = line.trim();
+    if (trimmedLine.startsWith('|') && trimmedLine.endsWith('|')) {
+      currentTable.push(trimmedLine.slice(1, -1).split('|').map(cell => cell.trim()));
+      return;
+    }
+
+    if (currentTable.length > 0) {
+      renderTable();
+    }
+
     if (line.startsWith('## ')) {
-      return <h2 key={index} className="text-2xl font-bold mt-6 mb-3 border-b pb-2">{line.substring(3)}</h2>;
+      elements.push(<h2 key={elements.length} className="text-2xl font-bold mt-6 mb-3 border-b pb-2">{line.substring(3)}</h2>);
+    } else if (trimmedLine.startsWith('**') && trimmedLine.endsWith('**')) {
+      elements.push(<h1 key={elements.length} className="text-3xl font-bold my-4 text-center">{trimmedLine.substring(2, trimmedLine.length - 2)}</h1>);
+    } else if (line.startsWith('* ') || line.startsWith('- ')) {
+      elements.push({type: 'li', content: line.substring(2)});
+    } else if (trimmedLine === '') {
+      elements.push(<br key={elements.length} />);
+    } else {
+      elements.push(<p key={elements.length} className="mb-2">{line}</p>);
     }
-    if (line.startsWith('* ') || line.startsWith('- ')) {
-      return <li key={index} className="ml-5 list-disc">{line.substring(2)}</li>;
-    }
-    if(line.trim() === '') {
-        return <br key={index} />;
-    }
-    return <p key={index} className="mb-2">{line}</p>;
   });
-  
+
+  if (currentTable.length > 0) {
+    renderTable();
+  }
+
   // Group list items
   const renderedContent = [];
   let listItems: JSX.Element[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.type === 'li') {
-      listItems.push(line);
+  for (let i = 0; i < elements.length; i++) {
+    const item = elements[i];
+    // FIX: The original type guard was not specific enough for TypeScript to differentiate
+    // the custom list item object from a standard JSX.Element. Checking for the existence
+    // of the 'content' property is a reliable way to identify our custom object and resolve the type error.
+    if (typeof item === 'object' && item && 'content' in item) {
+        listItems.push(<li key={`li-${i}`}>{item.content}</li>);
     } else {
       if (listItems.length > 0) {
-        renderedContent.push(<ul key={`ul-${i}`} className="mb-4">{listItems}</ul>);
+        renderedContent.push(<ul key={`ul-${i}`} className="mb-4 ml-5 list-disc">{listItems}</ul>);
         listItems = [];
       }
-      renderedContent.push(line);
+      if (React.isValidElement(item)) {
+        renderedContent.push(item);
+      }
     }
   }
   if (listItems.length > 0) {
-      renderedContent.push(<ul key="ul-last" className="mb-4">{listItems}</ul>);
+    renderedContent.push(<ul key="ul-last" className="mb-4 ml-5 list-disc">{listItems}</ul>);
   }
 
   return <div>{renderedContent}</div>;
@@ -86,98 +151,90 @@ const ReportDisplay: React.FC<ReportDisplayProps> = ({ reportData, onReset, onRe
         return;
     }
 
-    // Pre-emptively remove any old print sections to prevent duplication
-    const oldPrintSection = document.getElementById('print-section');
-    if (oldPrintSection) {
-        oldPrintSection.remove();
-    }
+    const reportHtml = reportContentElement.innerHTML;
 
-    // Create a dedicated section for printing that is hidden from the screen
-    const printSection = document.createElement('section');
-    printSection.id = 'print-section';
-
-    // Create the style element that defines screen and print visibility
-    const style = document.createElement('style');
-    style.textContent = `
-        @media screen {
-            #print-section {
-                display: none;
-            }
+    // Professional styles for the print-only window
+    const printStyles = `
+        body {
+            font-family: 'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', 'Nanum Gothic', dotum, sans-serif;
+            font-size: 11pt;
+            line-height: 1.6;
+            color: #000;
         }
-        @media print {
-            @page {
-                size: A4;
-                margin: 2cm;
-            }
-            /* Hide the main app content */
-            body > *:not(#print-section) {
-                display: none !important;
-            }
-            /* Show the print section and its contents */
-            #print-section {
-                display: block !important;
-            }
-            /* Apply professional print styles */
-            .printable-content {
-                color: #000;
-                background: #fff;
-                font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
-                font-size: 11pt;
-                line-height: 1.6;
-            }
-            .printable-content h2 {
-                font-size: 16pt;
-                font-weight: bold;
-                margin-top: 24pt;
-                margin-bottom: 12pt;
-                padding-bottom: 4pt;
-                border-bottom: 1.5px solid #000;
-                page-break-after: avoid;
-            }
-            .printable-content ul {
-                margin: 0 0 12pt 0;
-                padding-left: 2em;
-            }
-            .printable-content li {
-                list-style: disc !important;
-                display: list-item !important;
-                margin-bottom: 6pt;
-            }
-            .printable-content p {
-                 margin-bottom: 12pt;
-            }
-            .printable-content br {
-                display: block;
-                content: "";
-                margin-top: 12pt;
-            }
+        @page {
+            size: A4;
+            margin: 2cm;
+        }
+        h1 {
+            font-size: 20pt;
+            text-align: center;
+            font-weight: bold;
+            margin-top: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        h2 {
+            font-size: 16pt;
+            font-weight: bold;
+            margin-top: 1.5rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.25rem;
+            border-bottom: 1.5px solid #000;
+            page-break-after: avoid;
+        }
+        ul {
+            padding-left: 2em;
+            margin-bottom: 1rem;
+        }
+        li {
+            margin-bottom: 0.5rem;
+        }
+        p {
+            margin-bottom: 1rem;
+        }
+        table {
+            border-collapse: collapse;
+            width: auto;
+            margin-left: auto;
+            margin-right: 0;
+            margin-bottom: 1rem;
+        }
+        th, td {
+            border: 1px solid #000;
+            padding: 0.25rem 0.5rem;
+            text-align: center;
+        }
+        th {
+            font-weight: normal;
+        }
+        td {
+            height: 4em;
         }
     `;
 
-    // Clone the report content
-    const printableContent = reportContentElement.cloneNode(true) as HTMLElement;
-    printableContent.id = ''; // Avoid duplicate IDs
-    printableContent.className = 'printable-content';
+    const printWindow = window.open('', '_blank');
 
-    // Assemble the print section
-    printSection.appendChild(style);
-    printSection.appendChild(printableContent);
-    document.body.appendChild(printSection);
-
-    // Define a robust cleanup function
-    const cleanup = () => {
-        const section = document.getElementById('print-section');
-        if (section) {
-            section.remove();
-        }
-        window.removeEventListener('afterprint', cleanup);
-    };
-
-    window.addEventListener('afterprint', cleanup, { once: true });
-    window.print();
-    // A small timeout helps ensure cleanup happens even if the print dialog is cancelled quickly
-    // and 'afterprint' fails to fire in some browsers.
-    setTimeout(cleanup, 500);
+    if (printWindow) {
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html lang="ko">
+            <head>
+                <meta charset="UTF-8">
+                <title>AI 분석 보고서</title>
+                <style>${printStyles}</style>
+            </head>
+            <body>
+                ${reportHtml}
+            </body>
+            </html>
+        `);
+        
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+        
+    } else {
+        alert('팝업이 차단되었습니다. PDF 인쇄를 위해 팝업을 허용해주세요.');
+    }
   };
 
 
