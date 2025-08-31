@@ -1,0 +1,5 @@
+{
+  "name": "Handwritten Note AI Analyzer",
+  "description": "Upload a handwritten note, and this application will use AI to extract the text and generate a comprehensive, structured report based on its content.",
+  "requestFramePermissions": []
+}
