@@ -1,10 +1,11 @@
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { AppStep, InputMode } from './types';
 import type { ReportData } from './types';
 import FileUpload from './components/FileUpload';
 import ReportDisplay from './components/ReportDisplay';
 import Loader from './components/Loader';
+import DatePicker from './components/DatePicker';
 import { extractTextFromFile, generateReport } from './services/geminiService';
 import { HeaderIcon, FileIcon, TextIcon, SunIcon, MoonIcon, ChevronDownIcon } from './components/icons';
 
@@ -24,12 +25,15 @@ const App: React.FC = () => {
   const [formFile, setFormFile] = useState<File | null>(null);
   const [isInstructionsExpanded, setIsInstructionsExpanded] = useState(false);
   const [isFormUploadExpanded, setIsFormUploadExpanded] = useState(false);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
 
 
   // Results & Status
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+
+  const datePickerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null;
@@ -58,6 +62,19 @@ const App: React.FC = () => {
       localStorage.setItem('theme', 'light');
     }
   }, [theme]);
+  
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (datePickerRef.current && !datePickerRef.current.contains(event.target as Node)) {
+        setIsDatePickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
 
   const toggleTheme = () => {
     setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
@@ -197,9 +214,39 @@ const App: React.FC = () => {
               <label htmlFor="teamName" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">팀명 <span className="text-red-500">*</span></label>
               <input type="text" id="teamName" value={teamName} onChange={e => setTeamName(e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md focus:ring-1 focus:ring-indigo-500 placeholder-slate-400 dark:placeholder-slate-500" required aria-required="true"/>
             </div>
-            <div>
+            <div ref={datePickerRef} className="relative">
               <label htmlFor="reportDate" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">일시 <span className="text-red-500">*</span></label>
-              <input type="text" id="reportDate" value={reportDate} onChange={e => setReportDate(e.target.value)} className="w-full p-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md focus:ring-1 focus:ring-indigo-500 placeholder-slate-400 dark:placeholder-slate-500" required aria-required="true"/>
+              <input 
+                type="text" 
+                id="reportDate" 
+                value={reportDate} 
+                onChange={e => setReportDate(e.target.value)} 
+                onFocus={() => setIsDatePickerOpen(true)}
+                onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                  if (e.key === 'Tab' && !e.shiftKey) {
+                    setIsDatePickerOpen(false);
+                    const authorInput = document.getElementById('author');
+                    if (authorInput) {
+                      e.preventDefault();
+                      authorInput.focus();
+                    }
+                  }
+                }}
+                autoComplete="off"
+                className="w-full p-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md focus:ring-1 focus:ring-indigo-500 placeholder-slate-400 dark:placeholder-slate-500" 
+                required 
+                aria-required="true"
+              />
+              {isDatePickerOpen && (
+                <DatePicker 
+                  value={reportDate} 
+                  onChange={(newDate) => {
+                    setReportDate(newDate);
+                    setIsDatePickerOpen(false);
+                  }}
+                  onClose={() => setIsDatePickerOpen(false)}
+                />
+              )}
             </div>
             <div>
               <label htmlFor="author" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">작성자/보고자 이름 <span className="text-red-500">*</span></label>
@@ -266,7 +313,7 @@ const App: React.FC = () => {
           disabled={isAnalysisButtonDisabled()}
           className="w-full max-w-sm bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-300 transition-all duration-200 transform hover:scale-105 disabled:bg-slate-400 disabled:cursor-not-allowed disabled:scale-100 dark:disabled:bg-slate-600"
         >
-          공식 보고서 생성
+          AI 보고서 생성
         </button>
       </div>
 
@@ -303,7 +350,7 @@ const App: React.FC = () => {
           <div className="inline-flex items-center gap-4 mb-4">
             <HeaderIcon />
             <h1 className="text-4xl md:text-5xl font-bold text-slate-900 dark:text-white tracking-tight">
-              AI 공식 보고서 생성기
+              AI 보고서 생성기
             </h1>
           </div>
           <p className="text-lg md:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">

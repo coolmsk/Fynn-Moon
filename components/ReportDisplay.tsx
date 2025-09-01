@@ -20,7 +20,16 @@ const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
   const lines = content.split('\n');
   const elements: JSX.Element[] = [];
   let currentTable: string[][] = [];
-  let isFirstTable = true; // To identify the approval table
+  let tableCount = 0; // To identify table types
+
+  const renderCellContent = (text: string) => {
+    return text.split(/<br\s*\/?>/gi).map((part, index, arr) => (
+      <React.Fragment key={index}>
+        {part}
+        {index < arr.length - 1 && <br />}
+      </React.Fragment>
+    ));
+  };
 
   const renderTable = () => {
     if (currentTable.length === 0) return;
@@ -28,8 +37,7 @@ const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
     // Filter out markdown table separator lines (e.g., |:---|:---|)
     const tableData = currentTable.filter(row => !row.every(cell => /^-+$/.test(cell.replace(/:/g, ''))));
     
-    if (isFirstTable) { // Approval Table
-      isFirstTable = false;
+    if (tableCount === 0) { // Approval Table
       const header = tableData[0] || [];
       const bodyRows = tableData.slice(1);
 
@@ -39,7 +47,7 @@ const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
               <thead>
                   <tr>
                       {header.map((cell, i) => (
-                          <th key={i} className="border border-slate-400 dark:border-slate-600 px-4 py-1 text-center font-medium text-sm text-slate-700 dark:text-slate-300">{cell}</th>
+                          <th key={i} className="border border-slate-400 dark:border-slate-600 px-4 py-1 text-center font-medium text-sm text-slate-700 dark:text-slate-300">{renderCellContent(cell)}</th>
                       ))}
                   </tr>
               </thead>
@@ -47,7 +55,7 @@ const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
                   {bodyRows.map((row, i) => (
                       <tr key={i}>
                           {row.map((cell, j) => (
-                              <td key={j} className="border border-slate-400 dark:border-slate-600 text-center h-20 w-24 text-slate-700 dark:text-slate-300">{cell.trim() || '\u00A0'}</td>
+                              <td key={j} className="border border-slate-400 dark:border-slate-600 text-center h-20 w-24 text-slate-700 dark:text-slate-300">{renderCellContent(cell.trim() || '\u00A0')}</td>
                           ))}
                       </tr>
                   ))}
@@ -55,22 +63,48 @@ const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
           </table>
         </div>
       );
-    } else { // Metadata Table
+    } else if (tableCount === 1) { // Metadata Table
       elements.push(
         <div key={`table-wrapper-${elements.length}`} className="my-4">
           <table className="w-full border-collapse border border-slate-400 dark:border-slate-600">
               <tbody>
                   {tableData.map((row, i) => (
                      <tr key={i}>
-                       <th className="w-40 border border-slate-400 dark:border-slate-600 bg-slate-100 dark:bg-slate-700 p-2 text-center font-medium text-slate-700 dark:text-slate-300">{row[0]}</th>
-                       <td className="border border-slate-400 dark:border-slate-600 p-2 pl-4 text-left text-slate-700 dark:text-slate-300">{row[1]}</td>
+                       <th className="w-40 border border-slate-400 dark:border-slate-600 bg-slate-100 dark:bg-slate-700 p-2 text-center font-medium text-slate-700 dark:text-slate-300">{renderCellContent(row[0])}</th>
+                       <td className="border border-slate-400 dark:border-slate-600 p-2 pl-4 text-left text-slate-700 dark:text-slate-300">{renderCellContent(row[1])}</td>
                      </tr>
                   ))}
               </tbody>
           </table>
         </div>
       );
+    } else { // Generic Data Table
+        const header = tableData[0] || [];
+        const bodyRows = tableData.slice(1);
+        elements.push(
+            <div key={`table-wrapper-${elements.length}`} className="my-4 overflow-x-auto">
+              <table className="w-full text-sm border-collapse border border-slate-300 dark:border-slate-600">
+                  <thead className="bg-slate-100 dark:bg-slate-700">
+                      <tr>
+                          {header.map((cell, i) => (
+                              <th key={i} className="border border-slate-300 dark:border-slate-600 px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">{renderCellContent(cell)}</th>
+                          ))}
+                      </tr>
+                  </thead>
+                  <tbody>
+                      {bodyRows.map((row, i) => (
+                          <tr key={i} className="bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                              {row.map((cell, j) => (
+                                  <td key={j} className="border border-slate-300 dark:border-slate-600 px-3 py-2 text-slate-600 dark:text-slate-300">{renderCellContent(cell.trim())}</td>
+                              ))}
+                          </tr>
+                      ))}
+                  </tbody>
+              </table>
+            </div>
+        );
     }
+    tableCount++;
     currentTable = [];
   };
 

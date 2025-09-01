@@ -115,7 +115,7 @@ export async function generateReport(
     return response.text;
   } else {
     // Original logic for when no form is provided
-    const approvers = [author, ...approvalLine.split(',').map(s => s.trim()).filter(s => s)];
+    const approvers = ['담당', ...approvalLine.split(',').map(s => s.trim()).filter(s => s)];
     const approvalHeader = `| ${approvers.join(' | ')} |`;
     const approvalSeparator = `| ${approvers.map(() => ':---').join(' | ')} |`;
     const approvalBody = `| ${approvers.map(() => ' ').join(' | ')} |`;
@@ -137,10 +137,11 @@ export async function generateReport(
           | 작성자/보고자 | ${author} |
           | 제목 | [여기에 원본 내용을 요약한 보고서 제목을 생성하여 기입하세요] |
   
-      4.  **보고서 본문**: 보고서 정보 테이블 아래에, 다음의 계층적 번호 매기기 형식을 사용하여 본문을 작성해주세요. Markdown의 제목 기호(예: #, ##)나 굵은 글씨/기울임 기호(**, *)는 절대 사용하지 마세요.
+      4.  **보고서 본문**: 보고서 정보 테이블 아래에, 다음의 계층적 번호 매기기 형식을 사용하여 본문을 작성해주세요.
+          - **서식 규칙**: 보고서 전체(표 내부 포함)에서 제목 기호(#), 굵은 글씨/기울임 기호(*, **) 등 마크다운 서식 문자를 절대 사용하지 마세요. 모든 텍스트는 일반 텍스트 스타일을 유지해야 합니다. 표 내부에서 줄바꿈이 필요한 경우에만 예외적으로 \`<br>\` 태그를 사용하세요.
           - 본문 내용은 반드시 다음 5가지 항목 순서로 전개해야 합니다:
             1. 현황 및 개요
-            2. 문제점(데이터) 분석
+            2. 현황(데이터) 분석: 원본 내용을 **대외 환경**과 **대내 현황**으로 구분하여 분석해야 합니다. 각 분석에는 원본 내용의 데이터를 기반으로 한 표, 그래프 등의 도표를 **마크다운 형식으로** 1개 이상 반드시 포함하여 분석 내용을 시각적으로 제시해야 합니다.
             3. 개선방향
             4. 추진계획(세부내용)
             5. 총론
